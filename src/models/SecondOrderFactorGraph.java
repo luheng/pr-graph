@@ -15,7 +15,6 @@ public class SecondOrderFactorGraph {
 	public int[][][] prev;
 	public int[] decode;
 	public double logNorm;
-	
 	protected int S0, S00, SN;
 	protected AbstractFactorIterator fiter;
 	protected SecondOrderPotentialFunction potentialFunction;
@@ -27,7 +26,6 @@ public class SecondOrderFactorGraph {
 		this.maxLength = corpus.maxSequenceLength + 1;
 		this.numStates = corpus.numStates;
 		this.numTStates = corpus.numTags;
-		
 		edgeScore = new double[maxLength][numStates][numStates][numStates];
 		nodeScore = new double[maxLength][numStates];
 		edgeMarginal = new double[maxLength][numStates][numStates][numStates];

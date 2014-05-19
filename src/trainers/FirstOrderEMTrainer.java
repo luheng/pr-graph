@@ -56,18 +56,16 @@ public class FirstOrderEMTrainer {
 		this.config = config;
 	}
 	
-	private void initializeModel()
-	{
+	private void initializeModel() {
 		numParameters = potentialFunction.getNumFeatures();
 		theta = new double[numParameters];
 		empiricalCounts = new double[numParameters];
 		prevStepSize = 1.0;
-		
 		Arrays.fill(empiricalCounts, 0.0);
 		constraint = new FirstOrderTypeEG(corpus, graph, potentialFunction,
 				fiter, config);
-		
-		FirstOrderFactorGraph model = new FirstOrderFactorGraph(corpus, potentialFunction, fiter);
+		FirstOrderFactorGraph model = new FirstOrderFactorGraph(corpus,
+				potentialFunction, fiter);
 		for (int tid = 0; tid < corpus.numInstances; tid++) {
 			AbstractSequence instance = corpus.getInstance(tid);
 			if (instance.isLabeled) {
@@ -84,90 +82,79 @@ public class FirstOrderEMTrainer {
 		lineSearch = new WolfRuleLineSearch(new InterpolationPickFirstStep(
 				prevStepSize), 1e-4, 0.9, 10);
 		lineSearch.setDebugLevel(0);
-	
 		stopping = new CompositeStopingCriteria();
 		stopping.add(new NormalizedValueDifference(config.mstepStopThreshold));
-		
 		optimizer = new LBFGS(lineSearch, 10);
 		optimizer.setMaxIterations(config.numMstepIters);
 		stats = new OptimizerStats();
-		
 		mstepObjective = new MStepObjective(theta, transductive); 
 		boolean succeed = optimizer.optimize(mstepObjective, stats, stopping);
 		prevStepSize = optimizer.getCurrentStep();
-		System.out.println("success:\t" + succeed + "\twith latest stepsize:\t" + prevStepSize);
-	
-		
+		System.out.println("success:\t" + succeed +
+				"\twith latest stepsize:\t" + prevStepSize);
 		double obj = mstepObjective.objective;
-		if(constraint != null) obj += constraint.lpStrength / 2 * constraint.graphObjective 
-											- constraint.entropyObjective;
-				
+		if(constraint != null) {
+			obj += constraint.lpStrength / 2 * constraint.graphObjective -
+					constraint.entropyObjective;
+		}			
 		System.out.println("After M-step of iteration::\t" + currIter);
-		System.out.println("Negative Labeled Likelihood::\t" + mstepObjective.labelLikelihood);
-		System.out.println("Negative Unlabeled Likelihood::\t" + mstepObjective.softLikelihood);
+		System.out.println("Negative Labeled Likelihood::\t" +
+				mstepObjective.labelLikelihood);
+		System.out.println("Negative Unlabeled Likelihood::\t" +
+				mstepObjective.softLikelihood);
 		System.out.println("*** Combined objective::\t" + obj);
-		
 		timer.stamp("mstep-end");
 		timer.printIntervalsInMins("mstep-start", "mstep-end");
 		return obj;
 	}
 	
-	private double corpusEStep()
-	{
+	private double corpusEStep() {
 		System.out.println("Corpus E Step");
 		timer.stamp("estep-start");
-		
 		try {
 			constraint.project(theta, mstepObjective.softLikelihood);
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
-		
 		double obj = constraint.objective;
-		if(mstepObjective != null) 
+		if(mstepObjective != null) {
 			obj += config.labelStrength * mstepObjective.labelLikelihood + 
 							mstepObjective.parameterRegularizer;
-			
+		}
 		System.out.println("After E-step of iteration::\t" + currIter);
 		System.out.println("Entropy of Q::\t" + constraint.entropyObjective);
-		System.out.println("Negative Unlabeled Likelihood::\t" + constraint.likelihoodObjective);
+		System.out.println("Negative Unlabeled Likelihood::\t" +
+				constraint.likelihoodObjective);
 		System.out.println("Graph Violation::\t" + constraint.graphObjective);
 		System.out.println("*** Combined objective::\t" + obj);
-		
 		timer.stamp("estep-end");
 		timer.printIntervalsInMins("estep-start", "estep-end");
 		return obj;
 	}
 	
-	public void trainModel()
-	{
+	public void trainModel() {
 		initializeModel();
-		
 		transductive = false;
 		doAnalysis = false;
 		boolean success = false;
 		double prevObjective = Double.POSITIVE_INFINITY;
 		double prevTime = 1e-3 * System.currentTimeMillis();
-		
 		for(currIter = 0; currIter < config.numEMIters && !success; currIter++) {
 			System.out.println("Iteration:: " + currIter);
-			
 			if(currIter > 0) {
 				corpusEStep();		
 				transductive = true;
 			}
-			
 			double currObjective = corpusMStep();
 			double currTime = 1e-3 * System.currentTimeMillis();		
 			double objDec = Math.abs(prevObjective - currObjective) / prevObjective;
 			if(currIter > 2 && objDec < config.emStopThreshold) 
 				success = true;
-				
-			System.out.println("obj change::\t" + objDec + "\ttime elapsed::\t" + (currTime - prevTime) + "\t(sec)");
+			System.out.println("obj change::\t" + objDec +
+					"\ttime elapsed::\t" + (currTime - prevTime) + "\t(sec)");
 				
 			prevObjective = currObjective;
 			prevTime = currTime;
-			
 			if(currIter == 0) {
 				System.out.print("*** CRF Baseline:\t");
 			}
@@ -176,12 +163,12 @@ public class FirstOrderEMTrainer {
 			System.out.print("*** Testing:\t");
 			testAcc = testModel(corpus.tests);
 		}
-
 		System.out.println("EM Success:\t" + success);
 	}
 	
 	public double testModel(int[] instanceIDs) {
-		SentenceMonitorThread[] threads = new SentenceMonitorThread[config.numThreads];
+		SentenceMonitorThread[] threads =
+				new SentenceMonitorThread[config.numThreads];
 		double tokenAccuracy = .0, sequenceAccuracy = .0, tokenNorm = .0;
 		doAnalysis = false;
 		try {
@@ -189,8 +176,9 @@ public class FirstOrderEMTrainer {
 				threads[i] = new SentenceMonitorThread(i, threads.length, instanceIDs);
 				threads[i].start();
 			}
-			
-			for(int i = 0; i < threads.length; i++) threads[i].join();
+			for(int i = 0; i < threads.length; i++) {
+				threads[i].join();
+			}
 			for(int i = 0; i < threads.length; i++) {
 				tokenAccuracy += threads[i].numCorrectTokens;
 				sequenceAccuracy += threads[i].numCorrectSequences;
@@ -199,32 +187,31 @@ public class FirstOrderEMTrainer {
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
-		
 		tokenAccuracy /= tokenNorm;
-		System.out.print(String.format("token acc.\t%.3f%%", 100.0 * tokenAccuracy));
+		System.out.print(String.format("token acc.\t%.3f%%",
+				100.0 * tokenAccuracy));
 		System.out.println(String.format("\tsequence acc.\t%.3f%%",
 				100.0 * sequenceAccuracy / instanceIDs.length));
-		
 		return tokenAccuracy;
 	}
 	
 	public double testAndAnalyze(int[] instanceIDs, String outputFileLabel) {
-		SentenceMonitorThread[] threads = new SentenceMonitorThread[config.numThreads];
+		SentenceMonitorThread[] threads =
+				new SentenceMonitorThread[config.numThreads];
 		double tokenAccuracy = .0, sequenceAccuracy = .0, tokenNorm = .0;
 		doAnalysis = true;
 		try {
 			for(int i = 0; i < threads.length; i++) {
-				threads[i] = new SentenceMonitorThread(i, threads.length, instanceIDs);
+				threads[i] = new SentenceMonitorThread(i, threads.length,
+						instanceIDs);
 				threads[i].start();
 			}
-			
 			for(int i = 0; i < threads.length; i++) threads[i].join();
 			for(int i = 0; i < threads.length; i++) {
 				tokenAccuracy += threads[i].numCorrectTokens;
 				sequenceAccuracy += threads[i].numCorrectSequences;
 				tokenNorm += threads[i].numTokens;
 			}	
-			
 			tokenAccuracy /= tokenNorm;
 			System.out.print(String.format("token acc.\t%.3f%%",
 					100.0 * tokenAccuracy));
@@ -236,90 +223,89 @@ public class FirstOrderEMTrainer {
 		}
 		
 		doAnalysis = false;
-		
 		return tokenAccuracy;
 	}
 	
-	private double twoNormSquared(double[] x)
-	{
+	private double twoNormSquared(double[] x) {
 		double norm = .0;
-		for(double v : x) norm += v * v;
+		for (double v : x) {
+			norm += v * v;
+		}
 		return norm;
 	}
 
-	
-	public class MStepObjective extends Objective 
-	{
-		protected double objective, labelLikelihood, softLikelihood, parameterRegularizer, gpSquared;
+	public class MStepObjective extends Objective {
+		protected double objective, labelLikelihood, softLikelihood,
+			parameterRegularizer, gpSquared;
 		int nrFeatures;
 		boolean transductive;
 		SentenceUpdateThread[] threads;
 		int numThetaUpdates;
 		double[] gradientInit;
 	
-		public MStepObjective(double[] parameters, boolean transductive) 
-		{
+		public MStepObjective(double[] parameters, boolean transductive) {
 			this.nrFeatures = parameters.length;
 			this.transductive = transductive;
 			this.gradient = new double[nrFeatures];		
 			this.parameters = parameters;
 			this.gpSquared = config.gaussianPrior * config.gaussianPrior;
 			this.gradientInit = new double[parameters.length];
-			
 			for (int i = 0; i < parameters.length; i++) {
 				gradientInit[i] = - config.labelStrength * empiricalCounts[i];
-				if(transductive)
+				if (transductive) {
 					gradientInit[i] -= constraint.softEmpiricalCounts[i];
+				}
 			}
-			
 			this.threads = new SentenceUpdateThread[config.numThreads];
 			this.numThetaUpdates = 0;
 			setParameters(parameters);
-			
 		}
 		
-		public void updateObjectiveAndGradient()
-		{ 
-			parameterRegularizer = twoNormSquared(parameters) / (2.0 * gpSquared); 
+		public void updateObjectiveAndGradient() { 
+			parameterRegularizer = twoNormSquared(parameters) /
+					(2.0 * gpSquared); 
 			objective = 0; 	
 			labelLikelihood = 0;
-			softLikelihood = 0;
-			
+			softLikelihood = 0;	
 			for (int i = 0; i < gradient.length; i++) {
 				gradient[i] = gradientInit[i] + parameters[i] / gpSquared;
 				labelLikelihood -= parameters[i] * empiricalCounts[i];
-				softLikelihood -= parameters[i] * constraint.softEmpiricalCounts[i];
+				softLikelihood -= parameters[i] *
+						constraint.softEmpiricalCounts[i];
 			}
-			
 			try {
-				for(int i = 0; i < config.numThreads; i++) {
-					threads[i] = new SentenceUpdateThread(i, threads.length, corpus.numInstances);
+				for (int i = 0; i < config.numThreads; i++) {
+					threads[i] = new SentenceUpdateThread(i, threads.length,
+							corpus.numInstances);
 					threads[i].start();
 				}
-				for(int i = 0; i < config.numThreads; i++)	threads[i].join();
-				
+				for (int i = 0; i < config.numThreads; i++)	{
+					threads[i].join();
+				}
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
-			
-			for(int i = 0; i < config.numThreads; i++) {
-				for(int j = 0; j < gradient.length; j++) 
+			for (int i = 0; i < config.numThreads; i++) {
+				for (int j = 0; j < gradient.length; j++) {
 					gradient[j] += threads[i].localGradient[j];
-				
+				}
 				labelLikelihood += threads[i].localLabelLikelihood;
 				softLikelihood += threads[i].localSoftLikelihood;
-				
 				threads[i] = null;
 			}
-			
-			objective = parameterRegularizer + config.labelStrength * labelLikelihood;
-			if(transductive) objective += softLikelihood;
-			
-			if(updateCalls % 100 == 0) {
+			objective = parameterRegularizer + config.labelStrength *
+					labelLikelihood;
+			if (transductive) {
+				objective += softLikelihood;
+			}
+			if (updateCalls % 100 == 0) {
 				System.out.println("iteration:: " + updateCalls);
-				System.out.println("objective:: " + objective + "\tlabeled:: " + labelLikelihood + "\tunlabeled:: " + softLikelihood);
-				System.out.println("gradient norm:: " + twoNormSquared(gradient));
-				System.out.println("parameter norm:: " + twoNormSquared(parameters));
+				System.out.println("objective:: " + objective + "\tlabeled:: " +
+						labelLikelihood + "\tunlabeled:: " + softLikelihood);
+				System.out.println("gradient norm:: " +
+						twoNormSquared(gradient));
+				System.out.println("parameter norm:: " +
+						twoNormSquared(parameters));
 			}
 		}
 		
@@ -346,8 +332,7 @@ public class FirstOrderEMTrainer {
 			return "ocr discriminative model objective";
 		}
 		
-		private class SentenceUpdateThread extends Thread 
-		{
+		private class SentenceUpdateThread extends Thread {
 			@SuppressWarnings("unused")
 			private final int threadID, startJobID, endJobID;
 			
@@ -359,29 +344,29 @@ public class FirstOrderEMTrainer {
 				threadID = myID;
 				int batchSize = numJobs / numThreads;
 				startJobID = myID * batchSize;
-				endJobID = (myID < numThreads - 1 ? startJobID + batchSize : numJobs);
-				
+				endJobID = (myID < numThreads - 1 ?
+						startJobID + batchSize : numJobs);
 				localGradient = new double[theta.length];
-				model = new FirstOrderFactorGraph(corpus,	potentialFunction, fiter);
+				model = new FirstOrderFactorGraph(corpus, potentialFunction,
+							fiter);
 			}
 			
-			public void run()
-			{
+			public void run() {
 				localLabelLikelihood = 0;
 				localSoftLikelihood = 0;
 				Arrays.fill(localGradient, 0.0);
-				
 				for(int sid = startJobID; sid < endJobID; sid ++) {
 					AbstractSequence instance = corpus.getInstance(sid);
-					if(!transductive && !instance.isLabeled) continue;
-					
+					if (!transductive && !instance.isLabeled) {
+						continue;
+					}
 					model.computeScores(instance, parameters, config.backoff);
 					model.computeMarginals();	
-					if(instance.isLabeled) {
-						model.addToExpectation(sid, localGradient, config.labelStrength);
+					if (instance.isLabeled) {
+						model.addToExpectation(sid, localGradient,
+								config.labelStrength);
 						localLabelLikelihood += model.logNorm;
-					}
-					else {
+					} else {
 						model.addToExpectation(sid, localGradient, 1.0);
 						localSoftLikelihood += model.logNorm;
 					}	
@@ -390,57 +375,52 @@ public class FirstOrderEMTrainer {
 		}
 	}
 	
-	synchronized void printPredictedIntance(AbstractCorpus corpus, AbstractSequence instance, int[] prediction)
-	{
-		for(int i = 0; i < instance.length; i++)
+	synchronized void printPredictedIntance(AbstractCorpus corpus,
+			AbstractSequence instance, int[] prediction) {
+		for (int i = 0; i < instance.length; i++) {
 			System.out.print(corpus.getPrintableWord(instance.tokens[i]) + "\t");
+		}
 		System.out.println();
-		
-		for(int i = 0; i < instance.length; i++)
+		for (int i = 0; i < instance.length; i++) {
 			System.out.print(corpus.getPrintableTag(instance.tags[i]) + "\t");
+		}
 		System.out.println();
-		
-		for(int i = 0; i < instance.length; i++)
+		for (int i = 0; i < instance.length; i++) {
 			System.out.print(corpus.getPrintableTag(prediction[i]) + "\t");
-		
+		}
 		System.out.println("\n");
 	}
 	
-	private class SentenceMonitorThread extends Thread 
-	{
+	private class SentenceMonitorThread extends Thread {
 		@SuppressWarnings("unused")
 		private final int threadID, startJobID, endJobID;
 		private final int[] jobs;
 		private FirstOrderFactorGraph model;
 		public double numCorrectTokens, numCorrectSequences, numTokens;
 		
-		public SentenceMonitorThread(int threadID, int numThreads, int[] jobs)
-		{
+		public SentenceMonitorThread(int threadID, int numThreads, int[] jobs) {
 			this.threadID = threadID;
 			this.jobs = jobs;
 			int batchSize = jobs.length / numThreads;
 			startJobID = threadID * batchSize;
-			endJobID = (threadID < numThreads - 1 ? startJobID + batchSize : jobs.length);
+			endJobID = (threadID < numThreads - 1 ?
+					startJobID + batchSize : jobs.length);
 			model = new FirstOrderFactorGraph(corpus, potentialFunction, fiter);
 		}
 		
-		public void run()
-		{
+		public void run() {
 			numCorrectTokens = 0;
 			numCorrectSequences = 0;
 			numTokens = 0;
-			
-			for(int sid = startJobID; sid < endJobID; sid ++) {
+			for (int sid = startJobID; sid < endJobID; sid ++) {
 				AbstractSequence instance = corpus.getInstance(jobs[sid]);
 				model.computeScores(instance, theta, config.backoff);
 				model.computeMarginals();
-				
 				double acc = model.decodeAndEvaluate(instance.tags);
 				numTokens += instance.length;
 				numCorrectTokens += acc;
 				numCorrectSequences += (acc == instance.length ? 1 : 0);
 			}
 		}
-		
 	}
 }
